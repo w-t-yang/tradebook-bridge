@@ -14,7 +14,13 @@ This is a simple Python server using FastAPI and AkShare to provide stock market
     cd server
     ```
 
-2.  Install the required dependencies:
+2.  Create and activate a virtual environment:
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+    ```
+
+3.  Install the required dependencies:
     ```bash
     pip install -r requirements.txt
     ```
