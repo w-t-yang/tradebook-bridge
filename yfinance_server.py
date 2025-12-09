@@ -159,4 +159,4 @@ def get_markets():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8001) # Run on port 8001 to avoid conflict if both are running
+    uvicorn.run(app, host="127.0.0.1", port=8000) # Run on port 8001 to avoid conflict if both are running

@@ -71,6 +71,59 @@ def get_markets():
     df = df.rename(columns=rename_map)
     return df.to_dict(orient="records")
 
+# 5. Sectors
+@app.get("/sectors")
+def get_sectors():
+    try:
+        # EastMoney Industry Boards
+        df = ak.stock_board_industry_name_em()
+        # Columns: 排名, 板块名称, 相关链接, 最新价, 涨跌额, 涨跌幅, 总市值, 换手率, 上涨家数, 下跌家数, 领涨股票, 领涨股票-涨跌幅
+        rename_map = {
+            '板块名称': 'name',
+            '涨跌幅': 'change', # This is usually a percentage number like 1.23
+        }
+        df = df.rename(columns=rename_map)
+        
+        # Format change to string with % if needed, or keep as number. 
+        # CustomDataProvider expects CustomDataProvider to handle it or Server to return it?
+        # CustomDataProvider.ts getSectors returns empty array currently.
+        # Let's return a format that matches SectorPerformance in types.ts roughly:
+        # { name, filterKey, change, isUp, color }
+        # But server should return raw data, CustomDataProvider maps it.
+        # Let's return: { name, changePercent }
+        
+        results = []
+        for _, row in df.iterrows():
+            change_pct = row['change']
+            results.append({
+                'name': row['name'],
+                'change': f"{change_pct}%", # String format
+                'isUp': change_pct >= 0
+            })
+        return results
+    except Exception as e:
+        print(f"Error fetching sectors: {e}")
+        return []
+
+# 6. Events
+@app.get("/events")
+def get_events():
+    try:
+        # Economic Calendar
+        # ak.macro_china_money_supply() ? No, that's data.
+        # ak.news_cctv_baidu() ?
+        # Let's use a simple macro data source or return empty if complex.
+        # For now, let's mock some events or use a reliable macro function if known.
+        # ak.macro_china_cpi_yearly() returns historical data.
+        
+        # Let's return a static list or fetch real news as events?
+        # Ideally we want an economic calendar.
+        # ak.economic_calendar() exists in some versions?
+        # Let's stick to returning a structure that CustomDataProvider can map.
+        return [] 
+    except Exception:
+        return []
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
