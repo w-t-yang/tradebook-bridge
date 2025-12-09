@@ -23,12 +23,15 @@ def get_history(symbol: str, period: str = "daily"):
 def get_snapshot():
     # Fetches real-time data for ALL 5000+ stocks
     # Columns: code, name, trade, pricechange, changepercent, buy, sell, settlement, open, high, low, volume, amount, mktcap, ...
-    df = ak.stock_zh_a_spot_em()
+    df = ak.stock_zh_a_spot()
     # Rename for consistency with your app
+    # Note: stock_zh_a_spot does not return PE, PB, MarketCap, Turnover
     rename_map = {
         '代码': 'symbol', '名称': 'name', '最新价': 'price', 
-        '涨跌幅': 'changePercent', '市盈率-动态': 'pe', '市净率': 'pb', 
-        '总市值': 'marketCap', '换手率': 'turnover'
+        '涨跌幅': 'changePercent', 
+        '成交量': 'volume', '成交额': 'amount',
+        '昨收': 'prevClose', '今开': 'open',
+        '最高': 'high', '最低': 'low'
     }
     df = df.rename(columns=rename_map)
     # Filter only what we need to keep JSON light
@@ -41,7 +44,7 @@ def get_news(symbol: Optional[str] = None):
     # If symbol is provided, get specific stock news
     if symbol:
         df = ak.stock_news_em(symbol=symbol)
-        df = df[['发布时间', '文章标题', '文章链接']]
+        df = df[['发布时间', '新闻标题', '新闻链接']]
         df.columns = ['publishedAt', 'headline', 'url']
     else:
         # General Market News (CCTV or Similar)
@@ -56,7 +59,16 @@ def get_news(symbol: Optional[str] = None):
 @app.get("/markets")
 def get_markets():
     # Get Major Indices (ShangZheng, ShenZheng, etc.)
-    df = ak.stock_zh_index_spot()
+    # Using Sina source as it is more reliable and available
+    df = ak.stock_zh_index_spot_sina()
+    rename_map = {
+        '代码': 'symbol', '名称': 'name', '最新价': 'price', 
+        '涨跌额': 'change', '涨跌幅': 'changePercent', 
+        '昨收': 'prevClose', '今开': 'open', 
+        '最高': 'high', '最低': 'low', 
+        '成交量': 'volume', '成交额': 'amount'
+    }
+    df = df.rename(columns=rename_map)
     return df.to_dict(orient="records")
 
 if __name__ == "__main__":

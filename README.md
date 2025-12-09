@@ -27,24 +27,30 @@ This is a simple Python server using FastAPI and AkShare to provide stock market
 
 ## Running the Server
 
-To start the server, run:
+You can run either the AkShare-based server (Chinese Market) or the YFinance-based server (US/Global Market).
+
+### Option 1: AkShare Server (Chinese Market)
+Runs on port 8000.
 
 ```bash
-python main.py
+python akshare_server.py
+# Or with auto-reload
+uvicorn akshare_server:app --reload --port 8000
 ```
 
-Or using uvicorn directly (for development with auto-reload):
+### Option 2: YFinance Server (US/Global Market)
+Runs on port 8001.
 
 ```bash
-uvicorn main:app --reload
+python yfinance_server.py
+# Or with auto-reload
+uvicorn yfinance_server:app --reload --port 8001
 ```
-
-The server will start at `http://127.0.0.1:8000`.
 
 ## API Endpoints
 
-### 1. Stock History
-Get historical data for a specific stock.
+Both servers provide consistent endpoints:
+
 
 -   **URL:** `/history`
 -   **Method:** `GET`
