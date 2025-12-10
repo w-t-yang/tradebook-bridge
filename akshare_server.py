@@ -129,6 +129,65 @@ def get_events():
     except Exception:
         return []
 
+# Stock Info Endpoint
+@app.get("/info/{symbol}")
+def get_stock_info(symbol: str):
+    try:
+        # AkShare provides stock_individual_info_em for A-shares
+        # Try to get basic info
+        info_df = ak.stock_individual_info_em(symbol=symbol)
+        
+        # info_df is a DataFrame with columns: item, value
+        # Convert to dict for easier access
+        info_dict = dict(zip(info_df['item'], info_df['value']))
+        
+        # Try to get additional sector/industry info
+        try:
+            # Get stock board info
+            board_df = ak.stock_board_industry_name_em()
+            # This might not have direct mapping, so we'll use N/A
+            sector = "N/A"
+            industry = "N/A"
+        except:
+            sector = "N/A"
+            industry = "N/A"
+        
+        return {
+            "symbol": symbol,
+            "name": info_dict.get("股票简称", "N/A"),
+            "exchange": info_dict.get("上市时间", "N/A"),  # Using listing date as exchange info
+            "currency": "CNY",  # Chinese stocks are in CNY
+            "country": "China",
+            "sector": sector,
+            "industry": info_dict.get("行业", "N/A"),
+            "marketCap": info_dict.get("总市值", "N/A"),
+            "description": "N/A",  # AkShare doesn't provide company description
+            "website": "N/A",
+            "ceo": "N/A",
+            "employees": None,
+            "founded": None,
+            "ipoDate": info_dict.get("上市时间", "N/A")
+        }
+    except Exception as e:
+        # Fallback: return minimal info
+        return {
+            "symbol": symbol,
+            "name": symbol,
+            "exchange": "N/A",
+            "currency": "CNY",
+            "country": "China",
+            "sector": "N/A",
+            "industry": "N/A",
+            "marketCap": "N/A",
+            "description": "N/A",
+            "website": "N/A",
+            "ceo": "N/A",
+            "employees": None,
+            "founded": None,
+            "ipoDate": "N/A"
+        }
+
+
 if __name__ == "__main__":
     import uvicorn
     import argparse

@@ -25,7 +25,13 @@ def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
         yf_interval = interval_mapping.get(interval, interval)
 
         # Handle Chinese stock symbols
-        if symbol.isdigit() and len(symbol) == 6:
+        # Check for SH/SZ prefix (e.g., SH000001, SZ000001)
+        if symbol.startswith('SH') and len(symbol) == 8 and symbol[2:].isdigit():
+            symbol = f"{symbol[2:]}.SS"
+        elif symbol.startswith('SZ') and len(symbol) == 8 and symbol[2:].isdigit():
+            symbol = f"{symbol[2:]}.SZ"
+        # Check for 6-digit Chinese symbols
+        elif symbol.isdigit() and len(symbol) == 6:
             if symbol.startswith('6'):
                 symbol = f"{symbol}.SS"
             elif symbol.startswith('0') or symbol.startswith('3'):
@@ -178,6 +184,46 @@ def get_markets():
             continue
             
     return results
+
+# Stock Info Endpoint
+@app.get("/info/{symbol}")
+def get_stock_info(symbol: str):
+    try:
+        # Handle Chinese stock symbols
+        original_symbol = symbol
+        if symbol.startswith('SH') and len(symbol) == 8 and symbol[2:].isdigit():
+            symbol = f"{symbol[2:]}.SS"
+        elif symbol.startswith('SZ') and len(symbol) == 8 and symbol[2:].isdigit():
+            symbol = f"{symbol[2:]}.SZ"
+        elif symbol.isdigit() and len(symbol) == 6:
+            if symbol.startswith('6'):
+                symbol = f"{symbol}.SS"
+            elif symbol.startswith('0') or symbol.startswith('3'):
+                symbol = f"{symbol}.SZ"
+        
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        
+        # Extract relevant fields, use "N/A" for missing data
+        return {
+            "symbol": original_symbol,
+            "name": info.get("longName") or info.get("shortName") or "N/A",
+            "exchange": info.get("exchange") or "N/A",
+            "currency": info.get("currency") or "N/A",
+            "country": info.get("country") or "N/A",
+            "sector": info.get("sector") or "N/A",
+            "industry": info.get("industry") or "N/A",
+            "marketCap": str(info.get("marketCap", "N/A")),
+            "description": info.get("longBusinessSummary") or "N/A",
+            "website": info.get("website") or "N/A",
+            "ceo": "N/A",  # yfinance doesn't provide CEO info directly
+            "employees": info.get("fullTimeEmployees"),
+            "founded": None,  # yfinance doesn't provide founding year
+            "ipoDate": info.get("firstTradeDateEpochUtc")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Stock info not found: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
