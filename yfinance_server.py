@@ -11,6 +11,26 @@ app = FastAPI()
 def read_root():
     return {"status": "ok", "server": "yfinance_bridge"}
 
+def convert_symbol(symbol: str) -> str:
+    """
+    Convert stock symbol to yfinance format.
+    Handles Chinese stock symbols (SH/SZ prefix or 6-digit code).
+    """
+    # Check for SH/SZ prefix (e.g., SH000001, SZ000001)
+    if symbol.startswith('SH') and len(symbol) == 8 and symbol[2:].isdigit():
+        return f"{symbol[2:]}.SS"
+    elif symbol.startswith('SZ') and len(symbol) == 8 and symbol[2:].isdigit():
+        return f"{symbol[2:]}.SZ"
+    # Check for 6-digit Chinese symbols
+    elif symbol.isdigit() and len(symbol) == 6:
+        if symbol.startswith('6'):
+            return f"{symbol}.SS"
+        elif symbol.startswith('0') or symbol.startswith('3'):
+            return f"{symbol}.SZ"
+        # Add more rules here if needed (e.g., Beijing Stock Exchange)
+    
+    return symbol
+
 # 1. Stock Data (History)
 @app.get("/history")
 def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
@@ -24,19 +44,10 @@ def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
         }
         yf_interval = interval_mapping.get(interval, interval)
 
+        yf_interval = interval_mapping.get(interval, interval)
+
         # Handle Chinese stock symbols
-        # Check for SH/SZ prefix (e.g., SH000001, SZ000001)
-        if symbol.startswith('SH') and len(symbol) == 8 and symbol[2:].isdigit():
-            symbol = f"{symbol[2:]}.SS"
-        elif symbol.startswith('SZ') and len(symbol) == 8 and symbol[2:].isdigit():
-            symbol = f"{symbol[2:]}.SZ"
-        # Check for 6-digit Chinese symbols
-        elif symbol.isdigit() and len(symbol) == 6:
-            if symbol.startswith('6'):
-                symbol = f"{symbol}.SS"
-            elif symbol.startswith('0') or symbol.startswith('3'):
-                symbol = f"{symbol}.SZ"
-            # Add more rules here if needed (e.g., Beijing Stock Exchange)
+        symbol = convert_symbol(symbol)
 
         # yfinance period options: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
         ticker = yf.Ticker(symbol)
@@ -103,7 +114,7 @@ def get_snapshot():
 # 3. News
 @app.get("/news")
 def get_news(symbol: Optional[str] = None):
-    target_symbol = symbol if symbol else "SPY" # Default to S&P 500 if no symbol
+    target_symbol = convert_symbol(symbol) if symbol else "SPY" # Default to S&P 500 if no symbol
     try:
         t = yf.Ticker(target_symbol)
         news = t.news
@@ -197,15 +208,7 @@ def get_stock_info(symbol: str):
     try:
         # Handle Chinese stock symbols
         original_symbol = symbol
-        if symbol.startswith('SH') and len(symbol) == 8 and symbol[2:].isdigit():
-            symbol = f"{symbol[2:]}.SS"
-        elif symbol.startswith('SZ') and len(symbol) == 8 and symbol[2:].isdigit():
-            symbol = f"{symbol[2:]}.SZ"
-        elif symbol.isdigit() and len(symbol) == 6:
-            if symbol.startswith('6'):
-                symbol = f"{symbol}.SS"
-            elif symbol.startswith('0') or symbol.startswith('3'):
-                symbol = f"{symbol}.SZ"
+        symbol = convert_symbol(symbol)
         
         ticker = yf.Ticker(symbol)
         info = ticker.info
