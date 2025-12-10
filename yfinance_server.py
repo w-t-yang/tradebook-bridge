@@ -132,10 +132,16 @@ def get_news(symbol: Optional[str] = None):
                 if pub_time:
                     pub_date_str = datetime.fromtimestamp(pub_time).strftime('%Y-%m-%d %H:%M:%S')
                 
+            # Extract summary and source
+            summary = content.get('summary', '')
+            source = content.get('provider', {}).get('displayName') if isinstance(content.get('provider'), dict) else "Yahoo Finance"
+            
             results.append({
                 'publishedAt': pub_date_str,
                 'headline': title,
-                'url': url
+                'url': url,
+                'summary': summary,
+                'source': source
             })
         return results
     except Exception as e:

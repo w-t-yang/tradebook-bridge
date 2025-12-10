@@ -49,14 +49,20 @@ def get_news(symbol: Optional[str] = None):
     # If symbol is provided, get specific stock news
     if symbol:
         df = ak.stock_news_em(symbol=symbol)
+        # Check available columns, usually: 发布时间, 新闻标题, 新闻内容, 新闻链接
+        # We'll use title as summary if content is missing
         df = df[['发布时间', '新闻标题', '新闻链接']]
         df.columns = ['publishedAt', 'headline', 'url']
+        df['source'] = "East Money"
+        df['summary'] = df['headline'] # Use headline as summary
     else:
         # General Market News (CCTV or Similar)
         df = ak.stock_info_global_cls(symbol="A股24小时电报") # Cailian Press
         df = df[['time', 'content']]
         df.columns = ['publishedAt', 'headline']
         df['url'] = "" # Cailian often has no link
+        df['source'] = "East Money" # Or "Cailian Press" but user asked for East Money default
+        df['summary'] = df['headline']
     
     return df.head(20).to_dict(orient="records")
 
