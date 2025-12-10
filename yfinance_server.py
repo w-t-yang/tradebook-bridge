@@ -13,11 +13,20 @@ def read_root():
 
 # 1. Stock Data (History)
 @app.get("/history")
-def get_history(symbol: str, period: str = "1mo"):
+def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
     try:
+        # Map custom intervals to yfinance intervals
+        interval_mapping = {
+            '1d': '1d',
+            '1w': '1wk',
+            '1m': '1mo',
+            '1y': '3mo'
+        }
+        yf_interval = interval_mapping.get(interval, interval)
+
         # yfinance period options: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
         ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period)
+        df = ticker.history(period=period, interval=yf_interval)
         df = df.reset_index()
         
         # Ensure columns exist (yfinance returns Capital Case)

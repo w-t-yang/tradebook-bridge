@@ -12,11 +12,11 @@ def read_root():
 
 # 1. Stock Data (History)
 @app.get("/history")
-def get_history(symbol: str, period: str = "daily"):
+def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
     try:
         # AkShare: History A-Share
         # symbol expects "600519"
-        df = ak.stock_zh_a_hist(symbol=symbol, period=period, adjust="qfq")
+        df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date="20190707", adjust="qfq")
         df = df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
         df.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
         return df.to_dict(orient="records")
