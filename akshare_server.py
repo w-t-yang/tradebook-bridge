@@ -5,6 +5,11 @@ from typing import Optional
 
 app = FastAPI()
 
+# 1. Root / Health Check
+@app.get("/")
+def read_root():
+    return {"status": "ok", "server": "akshare_bridge"}
+
 # 1. Stock Data (History)
 @app.get("/history")
 def get_history(symbol: str, period: str = "daily"):

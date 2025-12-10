@@ -6,6 +6,11 @@ from datetime import datetime
 
 app = FastAPI()
 
+# 1. Root / Health Check
+@app.get("/")
+def read_root():
+    return {"status": "ok", "server": "yfinance_bridge"}
+
 # 1. Stock Data (History)
 @app.get("/history")
 def get_history(symbol: str, period: str = "1mo"):
