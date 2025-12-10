@@ -24,6 +24,14 @@ def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
         }
         yf_interval = interval_mapping.get(interval, interval)
 
+        # Handle Chinese stock symbols
+        if symbol.isdigit() and len(symbol) == 6:
+            if symbol.startswith('6'):
+                symbol = f"{symbol}.SS"
+            elif symbol.startswith('0') or symbol.startswith('3'):
+                symbol = f"{symbol}.SZ"
+            # Add more rules here if needed (e.g., Beijing Stock Exchange)
+
         # yfinance period options: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
         ticker = yf.Ticker(symbol)
         df = ticker.history(period=period, interval=yf_interval)
