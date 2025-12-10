@@ -131,4 +131,10 @@ def get_events():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="AkShare Bridge Server")
+    parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
+    args = parser.parse_args()
+
+    uvicorn.run(app, host="127.0.0.1", port=args.port)

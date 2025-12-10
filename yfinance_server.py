@@ -164,4 +164,10 @@ def get_markets():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000) # Run on port 8001 to avoid conflict if both are running
+    import argparse
+
+    parser = argparse.ArgumentParser(description="YFinance Bridge Server")
+    parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
+    args = parser.parse_args()
+
+    uvicorn.run(app, host="127.0.0.1", port=args.port)
