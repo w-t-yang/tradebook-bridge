@@ -166,7 +166,11 @@ def get_markets():
         '^GSPC': 'S&P 500', 
         '^DJI': 'Dow Jones', 
         '^IXIC': 'Nasdaq', 
-        '^RUT': 'Russell 2000'
+        '^RUT': 'Russell 2000',
+        '^VIX': 'VIX',
+        'GC=F': 'Gold',
+        'CL=F': 'Crude Oil',
+        '^TNX': '10Y Treasury'
     }
     results = []
     
@@ -201,6 +205,83 @@ def get_markets():
             continue
             
     return results
+
+# 5. Sectors Performance
+@app.get("/sectors")
+def get_sectors():
+    # Use Sector ETFs as proxies
+    sector_etfs = {
+        'Technology': 'XLK',
+        'Financials': 'XLF',
+        'Healthcare': 'XLV',
+        'Energy': 'XLE',
+        'Materials': 'XLB',
+        'Real Estate': 'XLRE',
+        'Industrials': 'XLI',
+        'Utilities': 'XLU',
+        'Consumer Disc': 'XLY',
+        'Consumer Staples': 'XLP',
+        'Communication': 'XLC'
+    }
+    
+    results = []
+    for name, sym in sector_etfs.items():
+        try:
+            t = yf.Ticker(sym)
+            fi = t.fast_info
+            
+            price = fi.last_price
+            prev_close = fi.previous_close
+            
+            if price is None or prev_close is None:
+                continue
+                
+            change = price - prev_close
+            change_percent = (change / prev_close) * 100
+            
+            results.append({
+                'name': name,
+                'filterKey': name, # Used for filtering news/stocks
+                'change': f"{change_percent:+.2f}%",
+                'isUp': change >= 0,
+                'color': 'text-green-500' if change >= 0 else 'text-red-500'
+            })
+        except Exception:
+            continue
+            
+    return results
+
+# 6. Market Events (Mock)
+@app.get("/events")
+def get_events():
+    # yfinance doesn't provide a good economic calendar API
+    # Return some mock events for now to populate the UI
+    return [
+        {
+            "time": "14:30",
+            "country": "USA",
+            "event": "CPI Data Release",
+            "actual": "3.2%",
+            "forecast": "3.1%",
+            "impact": "High"
+        },
+        {
+            "time": "16:00",
+            "country": "USA",
+            "event": "Fed Interest Rate Decision",
+            "actual": "-",
+            "forecast": "5.50%",
+            "impact": "High"
+        },
+        {
+            "time": "09:30",
+            "country": "EUR",
+            "event": "ECB Press Conference",
+            "actual": "-",
+            "forecast": "-",
+            "impact": "Medium"
+        }
+    ]
 
 # Stock Info Endpoint
 @app.get("/info/{symbol}")
