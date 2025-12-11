@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException
 import yfinance as yf
+from yfinance import EquityQuery
 import pandas as pd
-from typing import Optional
+import math
 from datetime import datetime
+from typing import Optional
 
 app = FastAPI()
 
@@ -305,6 +307,36 @@ def get_events():
     ]
 
 # Stock Info Endpoint
+def _extract_stock_info(symbol: str, info: dict) -> dict:
+    """Helper to extract relevant fields from yfinance info dict."""
+    return {
+        "symbol": symbol,
+        "name": info.get("longName") or info.get("shortName") or "N/A",
+        "exchange": info.get("exchange") or "N/A",
+        "currency": info.get("currency") or "N/A",
+        "country": info.get("country") or "N/A",
+        "sector": info.get("sector") or "N/A",
+        "industry": info.get("industry") or "N/A",
+        "marketCap": str(info.get("marketCap", "N/A")),
+        "description": info.get("longBusinessSummary") or "N/A",
+        "website": info.get("website") or "N/A",
+        "ceo": "N/A",  # yfinance doesn't provide CEO info directly
+        "employees": info.get("fullTimeEmployees"),
+        "founded": None,  # yfinance doesn't provide founding year
+        "ipoDate": info.get("firstTradeDateEpochUtc"),
+        # Financials
+        "trailingPE": info.get("trailingPE"),
+        "forwardPE": info.get("forwardPE"),
+        "priceToBook": info.get("priceToBook"),
+        "dividendYield": info.get("dividendYield"),
+        "beta": info.get("beta"),
+        "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
+        "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
+        "averageVolume": info.get("averageVolume"),
+        "trailingEps": info.get("trailingEps"),
+        "forwardEps": info.get("forwardEps")
+    }
+
 @app.get("/info/{symbol}")
 def get_stock_info(symbol: str):
     try:
@@ -315,36 +347,86 @@ def get_stock_info(symbol: str):
         ticker = yf.Ticker(symbol)
         info = ticker.info
         
-        # Extract relevant fields, use "N/A" for missing data
-        return {
-            "symbol": original_symbol,
-            "name": info.get("longName") or info.get("shortName") or "N/A",
-            "exchange": info.get("exchange") or "N/A",
-            "currency": info.get("currency") or "N/A",
-            "country": info.get("country") or "N/A",
-            "sector": info.get("sector") or "N/A",
-            "industry": info.get("industry") or "N/A",
-            "marketCap": str(info.get("marketCap", "N/A")),
-            "description": info.get("longBusinessSummary") or "N/A",
-            "website": info.get("website") or "N/A",
-            "ceo": "N/A",  # yfinance doesn't provide CEO info directly
-            "employees": info.get("fullTimeEmployees"),
-            "founded": None,  # yfinance doesn't provide founding year
-            "ipoDate": info.get("firstTradeDateEpochUtc"),
-            # Financials
-            "trailingPE": info.get("trailingPE"),
-            "forwardPE": info.get("forwardPE"),
-            "priceToBook": info.get("priceToBook"),
-            "dividendYield": info.get("dividendYield"),
-            "beta": info.get("beta"),
-            "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
-            "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
-            "averageVolume": info.get("averageVolume"),
-            "trailingEps": info.get("trailingEps"),
-            "forwardEps": info.get("forwardEps")
-        }
+        return _extract_stock_info(original_symbol, info)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Stock info not found: {str(e)}")
+
+@app.get("/screener")
+def get_screener_results(sector: str):
+    """
+    Get screener results for a specific sector using yfinance.screener.
+    Returns a list of stock info objects (same format as /info/{symbol}).
+    """
+    try:
+        # Map sector to valid yfinance sector names (Title Case usually works)
+        # Valid sectors: Basic Materials, Communication Services, Consumer Cyclical, Consumer Defensive, 
+        # Energy, Financial Services, Healthcare, Industrials, Real Estate, Technology, Utilities
+        
+        # Simple title casing might fail for "Consumer Cyclical" if input is "consumer cyclical" -> "Consumer Cyclical" (works)
+        # But "financial services" -> "Financial Services" (works)
+        # Let's try string.capwords or title()
+        valid_sector = sector.title() 
+        
+        # Special handling if needed, but title() should cover most standard ones
+        
+        try:
+            # Construct composite query: Sector AND Region=US
+            q = EquityQuery('and', [
+                EquityQuery('eq', ['sector', valid_sector]),
+                EquityQuery('eq', ['region', 'us'])
+            ])
+            response = yf.screen(q, count=100, size=100)
+        except Exception as e:
+            # Try to map common variations if title() failed or strict matching needed
+            # For now, propagate error but with clear message
+            raise HTTPException(status_code=400, detail=f"Screener query failed for sector '{valid_sector}': {str(e)}")
+            
+        if not response or 'quotes' not in response:
+             return []
+
+        results = []
+        quotes = response['quotes']
+        
+        for quote in quotes:
+            symbol = quote.get('symbol')
+            if not symbol:
+                continue
+            
+            # Map screen result to StockInfo format
+            # Note: Screen results may have fewer fields than full ticker info
+            stock_data = {
+                "symbol": symbol,
+                "name": quote.get("longName") or quote.get("shortName") or "N/A",
+                "exchange": quote.get("exchange") or "N/A",
+                "currency": quote.get("currency") or "N/A",
+                "country": "N/A", # Not available in screen result
+                "sector": valid_sector, # We know the sector from the query
+                "industry": "N/A", # Not available in screen result
+                "marketCap": str(quote.get("marketCap", "N/A")),
+                "description": "N/A",
+                "website": "N/A",
+                "ceo": "N/A",
+                "employees": None,
+                "founded": None,
+                "ipoDate": quote.get("firstTradeDateMilliseconds"), # This is ms timestamp
+                # Financials - keys might differ or be missing in screen results
+                "trailingPE": quote.get("trailingPE"),
+                "forwardPE": quote.get("forwardPE"),
+                "priceToBook": quote.get("priceToBook"),
+                "dividendYield": quote.get("dividendYield"),
+                "beta": quote.get("beta"),
+                "fiftyTwoWeekHigh": quote.get("fiftyTwoWeekHigh"),
+                "fiftyTwoWeekLow": quote.get("fiftyTwoWeekLow"),
+                "averageVolume": quote.get("averageDailyVolume3Month"),
+                "trailingEps": quote.get("epsTrailingTwelveMonths"),
+                "forwardEps": quote.get("epsForward")
+            }
+            results.append(stock_data)
+                
+        return results
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Screener error: {str(e)}")
 
 
 if __name__ == "__main__":

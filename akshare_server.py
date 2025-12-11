@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 import akshare as ak
 import pandas as pd
 from typing import Optional
+import yfinance as yf
+from yfinance import EquityQuery
 
 app = FastAPI()
 
@@ -168,6 +170,73 @@ def get_events():
         return [] 
     except Exception:
         return []
+
+# 7. Screener (via yfinance)
+@app.get("/screener")
+def get_screener_results(sector: str):
+    """
+    Get screener results for a specific sector using yfinance.screener with region='cn'.
+    Returns a list of stock info objects.
+    """
+    try:
+        # Map sector to valid yfinance sector names (Title Case)
+        valid_sector = sector.title() 
+        
+        try:
+            # Construct composite query: Sector AND Region=CN
+            q = EquityQuery('and', [
+                EquityQuery('eq', ['sector', valid_sector]),
+                EquityQuery('eq', ['region', 'cn'])
+            ])
+            response = yf.screen(q, count=100, size=100)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Screener query failed for sector '{valid_sector}': {str(e)}")
+            
+        if not response or 'quotes' not in response:
+             return []
+
+        results = []
+        quotes = response['quotes']
+        
+        for quote in quotes:
+            symbol = quote.get('symbol')
+            if not symbol:
+                continue
+            
+            # Map screen result to StockInfo format
+            stock_data = {
+                "symbol": symbol,
+                "name": quote.get("longName") or quote.get("shortName") or "N/A",
+                "exchange": quote.get("exchange") or "N/A",
+                "currency": quote.get("currency") or "N/A",
+                "country": "China", # We know it's CN region
+                "sector": valid_sector,
+                "industry": "N/A",
+                "marketCap": str(quote.get("marketCap", "N/A")),
+                "description": "N/A",
+                "website": "N/A",
+                "ceo": "N/A",
+                "employees": None,
+                "founded": None,
+                "ipoDate": quote.get("firstTradeDateMilliseconds"),
+                # Financials
+                "trailingPE": quote.get("trailingPE"),
+                "forwardPE": quote.get("forwardPE"),
+                "priceToBook": quote.get("priceToBook"),
+                "dividendYield": quote.get("dividendYield"),
+                "beta": quote.get("beta"),
+                "fiftyTwoWeekHigh": quote.get("fiftyTwoWeekHigh"),
+                "fiftyTwoWeekLow": quote.get("fiftyTwoWeekLow"),
+                "averageVolume": quote.get("averageDailyVolume3Month"),
+                "trailingEps": quote.get("epsTrailingTwelveMonths"),
+                "forwardEps": quote.get("epsForward")
+            }
+            results.append(stock_data)
+                
+        return results
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Screener error: {str(e)}")
 
 # Stock Info Endpoint
 @app.get("/info/{symbol}")
