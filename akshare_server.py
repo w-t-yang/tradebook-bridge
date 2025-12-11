@@ -26,7 +26,7 @@ def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
     try:
         # AkShare: History A-Share
         # symbol expects "600519"
-        df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date="20190707", adjust="qfq")
+        df = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="qfq")
         df = df[['日期', '开盘', '最高', '最低', '收盘', '成交量']]
         df.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
         return df.to_dict(orient="records")
@@ -210,6 +210,9 @@ def get_screener_results(sector: str = "Technology"):
             symbol = quote.get('symbol')
             if not symbol:
                 continue
+            
+            # Remove .SS and .SZ suffixes
+            symbol = symbol.replace(".SS", "").replace(".SZ", "")
             
             # Map screen result to StockInfo format
             stock_data = {

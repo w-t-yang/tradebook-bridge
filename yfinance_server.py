@@ -364,9 +364,9 @@ def get_stock_info(symbol: str):
         raise HTTPException(status_code=404, detail=f"Stock info not found: {str(e)}")
 
 @app.get("/screener")
-def get_screener_results(sector: str = "Technology"):
+def get_screener_results(sector: str = "Technology", region: str = "US"):
     """
-    Get screener results for a specific sector using yfinance.screener.
+    Get screener results for a specific sector and region using yfinance.screener.
     Returns a list of stock info objects (same format as /info/{symbol}).
     """
     try:
@@ -378,20 +378,21 @@ def get_screener_results(sector: str = "Technology"):
         # But "financial services" -> "Financial Services" (works)
         # Let's try string.capwords or title()
         valid_sector = sector.title() 
+        valid_region = region.lower()
         
         # Special handling if needed, but title() should cover most standard ones
         
         try:
-            # Construct composite query: Sector AND Region=US
+            # Construct composite query: Sector AND Region
             q = EquityQuery('and', [
                 EquityQuery('eq', ['sector', valid_sector]),
-                EquityQuery('eq', ['region', 'us'])
+                EquityQuery('eq', ['region', valid_region])
             ])
             response = yf.screen(q, count=100, size=100, sortField='intradaymarketcap', sortAsc=False)
         except Exception as e:
             # Try to map common variations if title() failed or strict matching needed
             # For now, propagate error but with clear message
-            raise HTTPException(status_code=400, detail=f"Screener query failed for sector '{valid_sector}': {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Screener query failed for sector '{valid_sector}' in region '{valid_region}': {str(e)}")
             
         if not response or 'quotes' not in response:
              return []
