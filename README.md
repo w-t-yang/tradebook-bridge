@@ -14,15 +14,9 @@ This is a simple Python server using FastAPI and AkShare to provide stock market
     cd server
     ```
 
-2.  Create and activate a virtual environment:
+2.  Install dependencies using Poetry:
     ```bash
-    python -m venv .venv
-    source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
-    ```
-
-3.  Install the required dependencies:
-    ```bash
-    pip install -r requirements.txt
+    poetry install
     ```
 
 ## Running the Server
@@ -33,18 +27,18 @@ You can run either the AkShare-based server (Chinese Market) or the YFinance-bas
 Runs on port 8000.
 
 ```bash
-python akshare_server.py
+poetry run python akshare_server.py
 # Or with auto-reload
-uvicorn akshare_server:app --reload --port 8000
+poetry run uvicorn akshare_server:app --reload --port 8000
 ```
 
 ### Option 2: YFinance Server (US/Global Market)
 Runs on port 8001.
 
 ```bash
-python yfinance_server.py
+poetry run python yfinance_server.py
 # Or with auto-reload
-uvicorn yfinance_server:app --reload --port 8001
+poetry run uvicorn yfinance_server:app --reload --port 8001
 ```
 
 ## API Endpoints

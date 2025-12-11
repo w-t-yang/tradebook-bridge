@@ -81,11 +81,11 @@ def get_snapshot():
     for sym in symbols:
         try:
             t = yf.Ticker(sym)
-            fi = t.fast_info
+            # Use info for rich data (slower but provides P/E, Market Cap etc.)
+            info = t.info
             
-            # fast_info provides quick access to latest price data
-            price = fi.last_price
-            prev_close = fi.previous_close
+            price = info.get('currentPrice') or info.get('regularMarketPrice')
+            prev_close = info.get('previousClose') or info.get('regularMarketPreviousClose')
             
             if price is None or prev_close is None:
                 continue
@@ -93,18 +93,39 @@ def get_snapshot():
             change = price - prev_close
             change_percent = (change / prev_close) * 100
             
+            # Calculate turnover rate if possible
+            volume = info.get('volume') or info.get('regularMarketVolume')
+            shares_outstanding = info.get('sharesOutstanding')
+            turnover_rate = (volume / shares_outstanding * 100) if (volume and shares_outstanding) else None
+            
+            # Calculate amplitude
+            day_high = info.get('dayHigh') or info.get('regularMarketDayHigh')
+            day_low = info.get('dayLow') or info.get('regularMarketDayLow')
+            amplitude = ((day_high - day_low) / prev_close * 100) if (day_high and day_low and prev_close) else None
+
             results.append({
                 'symbol': sym,
-                'name': sym, # fast_info doesn't provide full name easily without extra request
+                'name': info.get('shortName') or info.get('longName') or sym,
                 'price': price,
                 'change': change,
                 'changePercent': change_percent,
-                'volume': fi.last_volume,
-                'amount': fi.last_volume * price, # Approximate amount
+                'volume': volume,
+                'amount': (volume * price) if volume else 0,
+                'amplitude': amplitude,
+                'turnoverRate': turnover_rate,
+                'peRatio': info.get('trailingPE'),
+                'volumeRatio': (volume / info.get('averageVolume')) if (volume and info.get('averageVolume')) else None,
+                'fiveMinChange': 0, # Not available
+                'high': day_high,
+                'low': day_low,
+                'open': info.get('open') or info.get('regularMarketOpen'),
                 'prevClose': prev_close,
-                'open': fi.open,
-                'high': fi.day_high,
-                'low': fi.day_low
+                'totalMarketCap': info.get('marketCap'),
+                'floatMarketCap': info.get('marketCap'), # Approx
+                'riseSpeed': 0, # Not available
+                'pbRatio': info.get('priceToBook'),
+                'sixtyDayChange': 0, # Not directly available
+                'ytdChange': info.get('ytdReturn') or 0 # Often None for stocks
             })
         except Exception:
             continue
@@ -309,7 +330,18 @@ def get_stock_info(symbol: str):
             "ceo": "N/A",  # yfinance doesn't provide CEO info directly
             "employees": info.get("fullTimeEmployees"),
             "founded": None,  # yfinance doesn't provide founding year
-            "ipoDate": info.get("firstTradeDateEpochUtc")
+            "ipoDate": info.get("firstTradeDateEpochUtc"),
+            # Financials
+            "trailingPE": info.get("trailingPE"),
+            "forwardPE": info.get("forwardPE"),
+            "priceToBook": info.get("priceToBook"),
+            "dividendYield": info.get("dividendYield"),
+            "beta": info.get("beta"),
+            "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
+            "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
+            "averageVolume": info.get("averageVolume"),
+            "trailingEps": info.get("trailingEps"),
+            "forwardEps": info.get("forwardEps")
         }
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Stock info not found: {str(e)}")

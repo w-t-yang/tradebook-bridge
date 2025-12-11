@@ -28,19 +28,53 @@ def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
 def get_snapshot():
     # Fetches real-time data for ALL 5000+ stocks
     # Columns: code, name, trade, pricechange, changepercent, buy, sell, settlement, open, high, low, volume, amount, mktcap, ...
-    df = ak.stock_zh_a_spot()
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            df = ak.stock_zh_a_spot_em()
+            break
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Failed to fetch snapshot after {max_retries} attempts: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to fetch market data: {str(e)}")
+            import time
+            time.sleep(1)
+            continue
+    
     # Rename for consistency with your app
-    # Note: stock_zh_a_spot does not return PE, PB, MarketCap, Turnover
     rename_map = {
-        '代码': 'symbol', '名称': 'name', '最新价': 'price', 
+        '代码': 'symbol', 
+        '名称': 'name', 
+        '最新价': 'price', 
         '涨跌幅': 'changePercent', 
-        '成交量': 'volume', '成交额': 'amount',
-        '昨收': 'prevClose', '今开': 'open',
-        '最高': 'high', '最低': 'low'
+        '涨跌额': 'change',
+        '成交量': 'volume', 
+        '成交额': 'amount',
+        '振幅': 'amplitude',
+        '换手率': 'turnoverRate',
+        '市盈率-动态': 'peRatio',
+        '量比': 'volumeRatio',
+        '5分钟涨跌': 'fiveMinChange',
+        '最高': 'high', 
+        '最低': 'low',
+        '今开': 'open',
+        '昨收': 'prevClose',
+        '总市值': 'totalMarketCap',
+        '流通市值': 'floatMarketCap',
+        '涨速': 'riseSpeed',
+        '市净率': 'pbRatio',
+        '60日涨跌幅': 'sixtyDayChange',
+        '年初至今涨跌幅': 'ytdChange'
     }
+    
+    # Rename columns that exist
     df = df.rename(columns=rename_map)
-    # Filter only what we need to keep JSON light
-    return df[list(rename_map.values())].to_dict(orient="records")
+    
+    # Filter only mapped columns to keep JSON clean but comprehensive
+    available_cols = [col for col in rename_map.values() if col in df.columns]
+    
+    return df[available_cols].to_dict(orient="records")
 
 # 3. News
 @app.get("/news")
@@ -172,7 +206,18 @@ def get_stock_info(symbol: str):
             "ceo": "N/A",
             "employees": None,
             "founded": None,
-            "ipoDate": info_dict.get("上市时间", "N/A")
+            "ipoDate": info_dict.get("上市时间", "N/A"),
+            # Financials (Not available in stock_individual_info_em)
+            "trailingPE": "N/A",
+            "forwardPE": "N/A",
+            "priceToBook": "N/A",
+            "dividendYield": "N/A",
+            "beta": "N/A",
+            "fiftyTwoWeekHigh": "N/A",
+            "fiftyTwoWeekLow": "N/A",
+            "averageVolume": "N/A",
+            "trailingEps": "N/A",
+            "forwardEps": "N/A"
         }
     except Exception as e:
         # Fallback: return minimal info
@@ -190,7 +235,17 @@ def get_stock_info(symbol: str):
             "ceo": "N/A",
             "employees": None,
             "founded": None,
-            "ipoDate": "N/A"
+            "ipoDate": "N/A",
+            "trailingPE": "N/A",
+            "forwardPE": "N/A",
+            "priceToBook": "N/A",
+            "dividendYield": "N/A",
+            "beta": "N/A",
+            "fiftyTwoWeekHigh": "N/A",
+            "fiftyTwoWeekLow": "N/A",
+            "averageVolume": "N/A",
+            "trailingEps": "N/A",
+            "forwardEps": "N/A"
         }
 
 
