@@ -12,6 +12,14 @@ app = FastAPI()
 def read_root():
     return {"status": "ok", "server": "akshare_bridge"}
 
+def safe_float(val):
+    try:
+        if val is None: return None
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
 # 1. Stock Data (History)
 @app.get("/history")
 def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
@@ -173,7 +181,7 @@ def get_events():
 
 # 7. Screener (via yfinance)
 @app.get("/screener")
-def get_screener_results(sector: str):
+def get_screener_results(sector: str = "Technology"):
     """
     Get screener results for a specific sector using yfinance.screener with region='cn'.
     Returns a list of stock info objects.
@@ -188,7 +196,7 @@ def get_screener_results(sector: str):
                 EquityQuery('eq', ['sector', valid_sector]),
                 EquityQuery('eq', ['region', 'cn'])
             ])
-            response = yf.screen(q, count=100, size=100)
+            response = yf.screen(q, count=100, size=100, sortField='intradaymarketcap', sortAsc=False)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Screener query failed for sector '{valid_sector}': {str(e)}")
             
@@ -212,13 +220,17 @@ def get_screener_results(sector: str):
                 "country": "China", # We know it's CN region
                 "sector": valid_sector,
                 "industry": "N/A",
-                "marketCap": str(quote.get("marketCap", "N/A")),
+                "marketCap": safe_float(quote.get("marketCap")),
                 "description": "N/A",
                 "website": "N/A",
                 "ceo": "N/A",
                 "employees": None,
                 "founded": None,
-                "ipoDate": quote.get("firstTradeDateMilliseconds"),
+                "ipoDate": quote.get("firstTradeDateEpochUtc"),
+                # Real-time price data
+                "price": quote.get("regularMarketPrice"),
+                "change": quote.get("regularMarketChange"),
+                "changePercent": quote.get("regularMarketChangePercent"),
                 # Financials
                 "trailingPE": quote.get("trailingPE"),
                 "forwardPE": quote.get("forwardPE"),
@@ -227,7 +239,7 @@ def get_screener_results(sector: str):
                 "beta": quote.get("beta"),
                 "fiftyTwoWeekHigh": quote.get("fiftyTwoWeekHigh"),
                 "fiftyTwoWeekLow": quote.get("fiftyTwoWeekLow"),
-                "averageVolume": quote.get("averageDailyVolume3Month"),
+                "averageVolume": safe_float(quote.get("averageDailyVolume3Month")),
                 "trailingEps": quote.get("epsTrailingTwelveMonths"),
                 "forwardEps": quote.get("epsForward")
             }
@@ -269,7 +281,7 @@ def get_stock_info(symbol: str):
             "country": "China",
             "sector": sector,
             "industry": info_dict.get("行业", "N/A"),
-            "marketCap": info_dict.get("总市值", "N/A"),
+            "marketCap": safe_float(info_dict.get("总市值")),
             "description": "N/A",  # AkShare doesn't provide company description
             "website": "N/A",
             "ceo": "N/A",
@@ -298,7 +310,7 @@ def get_stock_info(symbol: str):
             "country": "China",
             "sector": "N/A",
             "industry": "N/A",
-            "marketCap": "N/A",
+            "marketCap": None,
             "description": "N/A",
             "website": "N/A",
             "ceo": "N/A",

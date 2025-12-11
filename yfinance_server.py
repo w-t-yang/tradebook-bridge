@@ -13,6 +13,14 @@ app = FastAPI()
 def read_root():
     return {"status": "ok", "server": "yfinance_bridge"}
 
+def safe_float(val):
+    try:
+        if val is None: return None
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def convert_symbol(symbol: str) -> str:
     """
     Convert stock symbol to yfinance format.
@@ -317,13 +325,17 @@ def _extract_stock_info(symbol: str, info: dict) -> dict:
         "country": info.get("country") or "N/A",
         "sector": info.get("sector") or "N/A",
         "industry": info.get("industry") or "N/A",
-        "marketCap": str(info.get("marketCap", "N/A")),
+        "marketCap": safe_float(info.get("marketCap")),
         "description": info.get("longBusinessSummary") or "N/A",
         "website": info.get("website") or "N/A",
         "ceo": "N/A",  # yfinance doesn't provide CEO info directly
         "employees": info.get("fullTimeEmployees"),
         "founded": None,  # yfinance doesn't provide founding year
         "ipoDate": info.get("firstTradeDateEpochUtc"),
+        # Real-time price data
+        "price": info.get("currentPrice") or info.get("regularMarketPrice"),
+        "change": info.get("regularMarketChange"),
+        "changePercent": info.get("regularMarketChangePercent"),
         # Financials
         "trailingPE": info.get("trailingPE"),
         "forwardPE": info.get("forwardPE"),
@@ -332,7 +344,7 @@ def _extract_stock_info(symbol: str, info: dict) -> dict:
         "beta": info.get("beta"),
         "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
         "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
-        "averageVolume": info.get("averageVolume"),
+        "averageVolume": safe_float(info.get("averageVolume")),
         "trailingEps": info.get("trailingEps"),
         "forwardEps": info.get("forwardEps")
     }
@@ -352,7 +364,7 @@ def get_stock_info(symbol: str):
         raise HTTPException(status_code=404, detail=f"Stock info not found: {str(e)}")
 
 @app.get("/screener")
-def get_screener_results(sector: str):
+def get_screener_results(sector: str = "Technology"):
     """
     Get screener results for a specific sector using yfinance.screener.
     Returns a list of stock info objects (same format as /info/{symbol}).
@@ -375,7 +387,7 @@ def get_screener_results(sector: str):
                 EquityQuery('eq', ['sector', valid_sector]),
                 EquityQuery('eq', ['region', 'us'])
             ])
-            response = yf.screen(q, count=100, size=100)
+            response = yf.screen(q, count=100, size=100, sortField='intradaymarketcap', sortAsc=False)
         except Exception as e:
             # Try to map common variations if title() failed or strict matching needed
             # For now, propagate error but with clear message
@@ -402,13 +414,17 @@ def get_screener_results(sector: str):
                 "country": "N/A", # Not available in screen result
                 "sector": valid_sector, # We know the sector from the query
                 "industry": "N/A", # Not available in screen result
-                "marketCap": str(quote.get("marketCap", "N/A")),
+                "marketCap": safe_float(quote.get("marketCap")),
                 "description": "N/A",
                 "website": "N/A",
                 "ceo": "N/A",
                 "employees": None,
                 "founded": None,
                 "ipoDate": quote.get("firstTradeDateMilliseconds"), # This is ms timestamp
+                # Real-time price data
+                "price": quote.get("regularMarketPrice"),
+                "change": quote.get("regularMarketChange"),
+                "changePercent": quote.get("regularMarketChangePercent"),
                 # Financials - keys might differ or be missing in screen results
                 "trailingPE": quote.get("trailingPE"),
                 "forwardPE": quote.get("forwardPE"),
@@ -417,7 +433,7 @@ def get_screener_results(sector: str):
                 "beta": quote.get("beta"),
                 "fiftyTwoWeekHigh": quote.get("fiftyTwoWeekHigh"),
                 "fiftyTwoWeekLow": quote.get("fiftyTwoWeekLow"),
-                "averageVolume": quote.get("averageDailyVolume3Month"),
+                "averageVolume": safe_float(quote.get("averageDailyVolume3Month")),
                 "trailingEps": quote.get("epsTrailingTwelveMonths"),
                 "forwardEps": quote.get("epsForward")
             }
