@@ -1,11 +1,11 @@
 # Tradebook Data Server
 
-This is a simple Python server using FastAPI and AkShare to provide stock market data for the Tradebook application.
+This directory contains Python servers using FastAPI to provide stock market data for the Tradebook application.
 
 ## Prerequisites
 
-- Python 3.8+
-- pip
+-   Python 3.8+
+-   [Poetry](https://python-poetry.org/docs/#installation) (Dependency Manager)
 
 ## Installation
 
@@ -21,57 +21,51 @@ This is a simple Python server using FastAPI and AkShare to provide stock market
 
 ## Running the Server
 
-You can run either the AkShare-based server (Chinese Market) or the YFinance-based server (US/Global Market).
-
-### Option 1: AkShare Server (Chinese Market)
-Runs on port 8000.
-
-```bash
-poetry run python akshare_server.py
-# Or with auto-reload
-poetry run uvicorn akshare_server:app --reload --port 8000
-```
-
-### Option 2: YFinance Server (US/Global Market)
-Runs on port 8001.
+### Hybrid Server (Recommended)
+Combines data from **yfinance** (US/Global) and **AkShare** (China A-Shares).
+Automatic symbol conversion is handled (e.g., `601318` -> `SH601318`).
 
 ```bash
-poetry run python yfinance_server.py
+poetry run python hybrid_server.py --port 8000
 # Or with auto-reload
-poetry run uvicorn yfinance_server:app --reload --port 8001
+poetry run uvicorn hybrid_server:app --reload --port 8000
 ```
 
-## API Endpoints
+### Other Servers (For Reference)
+You can explore these to understand how individual data providers are implemented.
 
-Both servers provide consistent endpoints:
+-   **yfinance_server.py**: US/Global market data only.
+-   **akshare_server.py**: Chinese A-Share market data only.
 
+## API Endpoints (Hybrid Server)
 
+### 1. Stock History
+Get historical price data.
 -   **URL:** `/history`
 -   **Method:** `GET`
 -   **Parameters:**
-    -   `symbol` (required): Stock symbol (e.g., "600519").
-    -   `period` (optional): Data period (default: "daily").
--   **Example:** `http://127.0.0.1:8000/history?symbol=600519`
+    -   `symbol` (required): Stock symbol (e.g., "SH601318", "601318", "AAPL").
+    -   `period` (optional): Data period (default: "5y").
+    -   `interval` (optional): Data interval (default: "1d").
 
-### 2. Market Snapshot (Screener)
-Get real-time data for all stocks.
-
+### 2. Market Snapshot
+Get real-time data for Chinese A-Shares (via AkShare).
 -   **URL:** `/snapshot`
 -   **Method:** `GET`
--   **Example:** `http://127.0.0.1:8000/snapshot`
 
 ### 3. News
-Get news for a specific stock or general market news.
-
+Get news for specific stock or market.
 -   **URL:** `/news`
 -   **Method:** `GET`
 -   **Parameters:**
-    -   `symbol` (optional): Stock symbol. If omitted, returns general market news.
--   **Example:** `http://127.0.0.1:8000/news?symbol=600519`
+    -   `symbol` (optional): Stock symbol.
+    -   `region` (optional): `us` (default) for Yahoo Finance news, `cn` for East Money news.
 
-### 4. Market Indices
-Get data for major market indices.
+### 4. Markets & Sectors
+-   `/markets`: Major US/Global Indices.
+-   `/sectors`: US Sector Performance.
 
--   **URL:** `/markets`
--   **Method:** `GET`
--   **Example:** `http://127.0.0.1:8000/markets`
+### 5. Other
+-   `/info/{symbol}`: detailed stock info.
+-   `/screener`: stock screener.
+-   `/events`: economic events (dummy data).
