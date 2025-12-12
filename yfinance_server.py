@@ -41,6 +41,18 @@ def convert_symbol(symbol: str) -> str:
     
     return symbol
 
+def format_symbol_for_client(symbol: str) -> str:
+    """
+    Convert yahoo finance symbol to client format (Chinese stock).
+    e.g. 601318.SS -> SH601318
+    e.g. 000001.SZ -> SZ000001
+    """
+    if symbol.endswith('.SS'):
+        return f"SH{symbol[:-3]}"
+    elif symbol.endswith('.SZ'):
+        return f"SZ{symbol[:-3]}"
+    return symbol
+
 # 1. Stock Data (History)
 @app.get("/history")
 def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
@@ -114,7 +126,7 @@ def get_snapshot():
             amplitude = ((day_high - day_low) / prev_close * 100) if (day_high and day_low and prev_close) else None
 
             results.append({
-                'symbol': sym,
+                'symbol': format_symbol_for_client(sym),
                 'name': info.get('shortName') or info.get('longName') or sym,
                 'price': price,
                 'change': change,
@@ -318,7 +330,7 @@ def get_events():
 def _extract_stock_info(symbol: str, info: dict) -> dict:
     """Helper to extract relevant fields from yfinance info dict."""
     return {
-        "symbol": symbol,
+        "symbol": format_symbol_for_client(symbol),
         "name": info.get("longName") or info.get("shortName") or "N/A",
         "exchange": info.get("exchange") or "N/A",
         "currency": info.get("currency") or "N/A",
@@ -408,7 +420,7 @@ def get_screener_results(sector: str = "Technology", region: str = "US"):
             # Map screen result to StockInfo format
             # Note: Screen results may have fewer fields than full ticker info
             stock_data = {
-                "symbol": symbol,
+                "symbol": format_symbol_for_client(symbol),
                 "name": quote.get("longName") or quote.get("shortName") or "N/A",
                 "exchange": quote.get("exchange") or "N/A",
                 "currency": quote.get("currency") or "N/A",
