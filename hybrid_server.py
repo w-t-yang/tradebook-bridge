@@ -102,9 +102,9 @@ def to_yfinance_format(symbol: str) -> str:
             
     # If it is pure 6 digits
     if symbol.isdigit() and len(symbol) == 6:
-        if symbol.startswith('6'):
+        if symbol.startswith('6') or symbol.startswith('5'):
             return f"{symbol}.SS"
-        elif symbol.startswith('0') or symbol.startswith('3'):
+        elif symbol.startswith('0') or symbol.startswith('3') or symbol.startswith('1'):
             return f"{symbol}.SZ"
             
     return symbol
@@ -210,6 +210,7 @@ def get_snapshot():
 # 3.3 /news
 @app.get("/news")
 def get_news(symbol: Optional[str] = None, region: str = "us"):
+    region = region.lower()
     try:
         if region == "us":
             # Use yfinance
@@ -256,7 +257,6 @@ def get_news(symbol: Optional[str] = None, region: str = "us"):
                     ak_symbol = fixed[2:]
                 else:
                     ak_symbol = symbol 
-                    
                 df = ak.stock_news_em(symbol=ak_symbol)
                 df = df[['发布时间', '新闻标题', '新闻链接']]
                 df.columns = ['publishedAt', 'headline', 'url']
@@ -265,33 +265,54 @@ def get_news(symbol: Optional[str] = None, region: str = "us"):
                 return df.head(20).to_dict(orient="records")
             else:
                 df = ak.stock_info_global_cls(symbol="A股24小时电报")
-                df = df[['time', 'content']]
-                df.columns = ['publishedAt', 'headline']
-                df['url'] = ""
-                df['source'] = "East Money"
-                df['summary'] = df['headline']
+                # Columns: ['标题', '内容', '发布日期', '发布时间']
+                # Construct datetime
+                df['publishedAt'] = df['发布日期'].astype(str) + ' ' + df['发布时间'].astype(str)
+                df['headline'] = df['标题'].fillna('')
+                # If headline is empty, use content
+                mask = df['headline'] == ''
+                df.loc[mask, 'headline'] = df.loc[mask, '内容']
+                
+                df['summary'] = df['内容']
+                df['url'] = "" # telegraphs often don't have distinct URLs
+                df['source'] = "Cailian Press"
+                
+                df = df[['publishedAt', 'headline', 'url', 'summary', 'source']]
                 return df.head(20).to_dict(orient="records")
         else:
             return []
             
     except Exception as e:
-        # Fallback empty list or raise
         print(f"News error: {e}")
         return []
 
 # 3.4 /markets (yfinance)
 @app.get("/markets")
-def get_markets():
-    indices = {
-        '^GSPC': 'S&P 500', 
-        '^DJI': 'Dow Jones', 
-        '^IXIC': 'Nasdaq', 
-        '^RUT': 'Russell 2000',
-        '^VIX': 'VIX',
-        'GC=F': 'Gold',
-        'CL=F': 'Crude Oil',
-        '^TNX': '10Y Treasury'
-    }
+def get_markets(region: str = "US"):
+    indices = {}
+    
+    if region.upper() == "CN":
+        indices = {
+            '000001.SS': '上证指数',
+            '399001.SZ': '深证成指',
+            '000300.SS': '沪深300',
+            '^HSI': '恒生指数',
+            '399006.SZ': '创业板指',
+            '000688.SS': '科创50',
+            '000905.SS': '中证500',
+            '000016.SS': '上证50'
+        }
+    else:
+        indices = {
+            '^GSPC': 'S&P 500', 
+            '^DJI': 'Dow Jones', 
+            '^IXIC': 'Nasdaq', 
+            '^RUT': 'Russell 2000',
+            '^VIX': 'VIX',
+            'GC=F': 'Gold',
+            'CL=F': 'Crude Oil',
+            '^TNX': '10Y Treasury'
+        }
     results = []
     
     for sym, name in indices.items():
@@ -308,13 +329,15 @@ def get_markets():
             change = price - prev_close
             change_percent = (change / prev_close) * 100
             
+            # Use fixed format for return if it's a CN index
+            display_symbol = sym
+            if region.upper() == "CN":
+                 # Convert to SH/SZ format for display
+                 # to_fixed_format handles .SS/.SZ correctly
+                 display_symbol = to_fixed_format(sym)
+            
             results.append({
-                'symbol': sym, # Indices symbols can remain as is, or we could prefix them? Requirement says "all accepted symbols will be converted...". But indices like ^GSPC don't fit SH/SZ format. 
-                               # "Every symbol should be converted to Chinese format compliant". 
-                               # Since these are US indices, arguably they don't have a Chinese format. 
-                               # I'll leave them as is or maybe just return them. 
-                               # "make sure, all accepted symbols will be converted to Chinese format compliant" -> usually refers to stock symbols handled by converters.
-                               # I will keep them as is for indices since they are not Chinese stocks.
+                'symbol': display_symbol,
                 'name': name,
                 'price': price,
                 'change': change,
@@ -333,25 +356,64 @@ def get_markets():
 
 # 3.5 /sectors (yfinance)
 @app.get("/sectors")
-def get_sectors():
-    sector_etfs = {
-        'Technology': 'XLK',
-        'Financials': 'XLF',
-        'Healthcare': 'XLV',
-        'Energy': 'XLE',
-        'Materials': 'XLB',
-        'Real Estate': 'XLRE',
-        'Industrials': 'XLI',
-        'Utilities': 'XLU',
-        'Consumer Disc': 'XLY',
-        'Consumer Staples': 'XLP',
-        'Communication': 'XLC'
-    }
+def get_sectors(region: str = "US"):
+    sector_etfs = {}
     
+    if region.upper() == "CN":
+        # Domestic active sector ETFs (CSI/Other thematic) - 6 digits
+        sector_etfs = {
+            'Basic Materials': '512400',
+            'Communication Services': '515050',
+            'Consumer Cyclical': '510200',
+            'Consumer Defensive': '510630',
+            'Energy': '159930',
+            'Financial Services': '510230',
+            'Healthcare': '512170',
+            'Industrials': '512660',
+            'Real Estate': '512200',
+            'Technology': '512760',
+            'Utilities': '159985',
+            'Semiconductors': '512480'
+        }
+    else:
+        # US Sector ETFs (SPDR)
+        sector_etfs = {
+            'Basic Materials': 'XLB',
+            'Communication Services': 'XLC',
+            'Consumer Cyclical': 'XLY',
+            'Consumer Defensive': 'XLP',
+            'Energy': 'XLE',
+            'Financial Services': 'XLF',
+            'Healthcare': 'XLV',
+            'Industrials': 'XLI',
+            'Real Estate': 'XLRE',
+            'Technology': 'XLK',
+            'Utilities': 'XLU',
+            'Semiconductors': 'SMH'
+        }
+    
+    SECTOR_TRANSLATIONS = {
+        'Basic Materials': '基础材料',
+        'Communication Services': '通信服务',
+        'Consumer Cyclical': '周期性消费',
+        'Consumer Defensive': '防御性消费',
+        'Energy': '能源',
+        'Financial Services': '金融服务',
+        'Healthcare': '医疗保健',
+        'Industrials': '工业',
+        'Real Estate': '房地产',
+        'Technology': '科技',
+        'Utilities': '公用事业',
+        'Semiconductors': '半导体'
+    }
+
     results = []
     for name, sym in sector_etfs.items():
         try:
-            t = yf.Ticker(sym)
+            # For CN region, we might have pure 6 digit codes that need conversion
+            # For US, they are already valid ticker symbols
+            yf_sym = to_yfinance_format(sym)
+            t = yf.Ticker(yf_sym)
             fi = t.fast_info
             
             price = fi.last_price
@@ -363,12 +425,16 @@ def get_sectors():
             change = price - prev_close
             change_percent = (change / prev_close) * 100
             
+            display_name = name
+            if region.upper() == "CN":
+                display_name = SECTOR_TRANSLATIONS.get(name, name)
+            
             results.append({
-                'name': name,
+                'name': display_name,
                 'filterKey': name,
                 'change': f"{change_percent:+.2f}%",
                 'isUp': change >= 0,
-                'color': 'text-green-500' if change >= 0 else 'text-red-500'
+                'color': 'text-green-300' if change >= 0 else 'text-red-300'
             })
         except Exception:
             continue
@@ -399,12 +465,6 @@ def get_events():
 
 # 3.7 /info (yfinance)
 def _extract_stock_info(symbol: str, info: dict) -> dict:
-    # Helper to extract relevant fields
-    # Return symbol in FIXED format
-    
-    # yfinance info['symbol'] usually is like "AAPL" or "601318.SS"
-    # We want to format it.
-    
     yf_symbol = info.get('symbol', symbol)
     fixed_symbol = to_fixed_format(yf_symbol)
     
@@ -447,11 +507,24 @@ def get_stock_info(symbol: str):
         ticker = yf.Ticker(yf_symbol)
         info = ticker.info
         
-        return _extract_stock_info(symbol, info)
+        result = _extract_stock_info(symbol, info)
+        
+        # Auto-detect and map name if symbol is in our map
+        sym_upper = symbol.strip().upper()
+        if sym_upper in SYMBOL_TO_NAME:
+            result['name'] = SYMBOL_TO_NAME[sym_upper]
+        else:
+            fixed = to_fixed_format(symbol)
+            if fixed in SYMBOL_TO_NAME:
+                result['name'] = SYMBOL_TO_NAME[fixed]
+            elif len(fixed) == 8:
+                 bare = fixed[2:]
+                 if bare in SYMBOL_TO_NAME:
+                     result['name'] = SYMBOL_TO_NAME[bare]
+        
+        return result
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Stock info not found: {str(e)}")
-
-# 3.8 /screener (yfinance)
 @app.get("/screener")
 def get_screener_results(sector: str = "", region: str = "US"):
     try:
@@ -460,10 +533,16 @@ def get_screener_results(sector: str = "", region: str = "US"):
         
         try:
 
-            q = EquityQuery('and', [
-                EquityQuery('eq', ['sector', valid_sector]),
-                EquityQuery('eq', ['region', valid_region])
-            ]) if len(valid_sector) > 0 else EquityQuery('eq', ['region', valid_region])
+            if valid_sector == 'Semiconductors':
+                q = EquityQuery('and', [
+                    EquityQuery('eq', ['industry', 'Semiconductors']),
+                    EquityQuery('eq', ['region', valid_region])
+                ])
+            else:
+                q = EquityQuery('and', [
+                    EquityQuery('eq', ['sector', valid_sector]),
+                    EquityQuery('eq', ['region', valid_region])
+                ]) if len(valid_sector) > 0 else EquityQuery('eq', ['region', valid_region])
             response = yf.screen(q, count=100, size=100, sortField='intradaymarketcap', sortAsc=False)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Screener failed: {str(e)}")
@@ -483,11 +562,11 @@ def get_screener_results(sector: str = "", region: str = "US"):
                 "name": quote.get("longName") or quote.get("shortName") or "N/A",
                 "exchange": quote.get("exchange") or "N/A",
                 "currency": quote.get("currency") or "N/A",
-                "country": "N/A",
-                "sector": valid_sector,
-                "industry": "N/A",
+                "country": quote.get("country") or "N/A",
+                "sector": quote.get("sector") or valid_sector,
+                "industry": quote.get("industry") or "N/A",
                 "marketCap": safe_float(quote.get("marketCap")),
-                "description": "N/A",
+                "description": quote.get("longBusinessSummary") or "N/A",
                 "website": "N/A",
                 "ceo": "N/A",
                 "employees": None,

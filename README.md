@@ -44,7 +44,7 @@ Get historical price data.
 -   **URL:** `/history`
 -   **Method:** `GET`
 -   **Parameters:**
-    -   `symbol` (required): Stock symbol (e.g., "SH601318", "601318", "AAPL").
+    -   `symbol` (required): Stock symbol.
     -   `period` (optional): Data period (default: "5y").
     -   `interval` (optional): Data interval (default: "1d").
 
@@ -65,7 +65,12 @@ Get news for specific stock or market.
 -   `/markets`: Major US/Global Indices.
 -   `/sectors`: US Sector Performance.
 
-### 5. Other
--   `/info/{symbol}`: detailed stock info.
--   `/screener`: stock screener.
--   `/events`: economic events (dummy data).
+### 5. Stock Info
+-   **URL:** `/info/{symbol}`
+-   **Method:** `GET`
+-   **Description:** Get detailed stock information.
+-   **Auto-Detection:** If the symbol is identified as a Chinese stock (present in the server's name map), the `name` field will be automatically localized to Chinese.
+
+### 6. Other
+-   `/screener`
+-   `/events`
