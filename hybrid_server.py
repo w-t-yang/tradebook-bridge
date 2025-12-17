@@ -26,6 +26,7 @@ def safe_float(val):
         return None
 
 import json
+import requests
 
 def load_symbol_name_map():
     """Load symbol to name mapping from JSON"""
@@ -110,6 +111,49 @@ def to_yfinance_format(symbol: str) -> str:
     return symbol
 
 
+# --- Helper for Chinese Stocks ---
+def get_price_day_tx(code, end_date='', count=1250, frequency='1d'):
+    """
+    Fetch history from Tencent Web Interface.
+    code: valid full code like 'sh600519' or 'sz000001' (lowercase prefix)
+    frequency: '1d', '1w', '1m'
+    """
+    unit = 'week' if frequency == '1w' else 'month' if frequency == '1m' else 'day'
+    
+    if end_date:
+        if isinstance(end_date, datetime):
+            end_date = end_date.strftime('%Y-%m-%d') 
+        else:
+            end_date = str(end_date).split(' ')[0]
+    
+    # If end_date is today, clear it to get latest
+    if end_date == datetime.now().strftime('%Y-%m-%d'):
+        end_date = ''
+        
+    URL = f'http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={code},{unit},,{end_date},{count},qfq'
+    
+    # print(f"Fetching {URL}")
+    resp = requests.get(URL)
+    st = json.loads(resp.content)
+    
+    ms = 'qfq' + unit
+    if code not in st['data']:
+        return pd.DataFrame() # Return empty if code not found
+        
+    stk = st['data'][code]
+    buf = stk[ms] if ms in stk else stk[unit]
+    
+    # Ensure we only take the first 6 columns (some stocks have 7 or more)
+    buf = [item[:6] for item in buf]
+    
+    df = pd.DataFrame(buf, columns=['time','open','close','high','low','volume'])
+    cols = ['open', 'close', 'high', 'low', 'volume']
+    df[cols] = df[cols].astype(float)
+    df['time'] = pd.to_datetime(df['time'])
+    return df
+
+
+
 # --- Endpoints ---
 
 # 3.1 /history (same as yfinance_server.py)
@@ -119,33 +163,87 @@ def get_history(symbol: str, period: str = "5y", interval: str = "1d"):
         # Convert to yfinance format for fetching
         yf_symbol = to_yfinance_format(symbol)
         
-        interval_mapping = {
-            '1d': '1d',
-            '1w': '1wk',
-            '1m': '1mo',
-            '1y': '3mo'
-        }
-        yf_interval = interval_mapping.get(interval, interval)
+        # Check if it is a Chinese stock
+        # Our to_fixed_format ensures SHxxxxxx / SZxxxxxx
+        fixed_symbol = to_fixed_format(symbol)
+        is_cn = fixed_symbol.startswith("SH") or fixed_symbol.startswith("SZ")
+        
+        if is_cn:
+            # logic for Chinese stocks using get_price_day_tx
+            # 1. Prepare code: 'sh600519' (lowercase)
+            code = fixed_symbol.lower()
+            
+            # 2. Map interval
+            # interval: 1d, 1w, 1m. yfinance uses 1wk, 1mo. Endpoint uses 1w, 1m (mapped inside helper to 'week', 'month')
+            freq = '1d'
+            if interval in ['1wk', '1w']: freq = '1w'
+            if interval in ['1mo', '1m']: freq = '1m'
 
-        ticker = yf.Ticker(yf_symbol)
-        df = ticker.history(period=period, interval=yf_interval)
-        df = df.reset_index()
-        
-        required_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-        if not all(col in df.columns for col in required_cols):
-             if df.empty:
-                 return []
-        
-        df = df[required_cols]
-        df.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
-        
-        df['date'] = df['date'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else '')
-        
-        # Note: History items usually don't have the 'symbol' field in the array, 
-        # but if we were to return it, it should be in fixed format.
-        # The return type is List[Dict].
-        
-        return df.to_dict(orient="records")
+            # 3. Map period to count
+            # approximate trading days
+            period_map = {
+                '1d': 1, '5d': 5, '1mo': 22, '3mo': 65, '6mo': 130, 
+                '1y': 250, '2y': 500, '5y': 1250, '10y': 2500, 'max': 5000, 'ytd': 250 
+            }
+            # If period is not in map, try to parse it (e.g. if we get "250d" ?) - currently simple map
+            count = period_map.get(period, 1250)
+            
+            # If period is 'ytd', we might need better handling, but count=250 is a safe fallback for "this year" roughly
+            # To be precise for YTD:
+            if period == 'ytd':
+                start_of_year = datetime(datetime.now().year, 1, 1)
+                days_diff = (datetime.now() - start_of_year).days
+                # Approximate trading days (5/7)
+                count = int(days_diff * 5 / 7) + 5
+            
+            df = get_price_day_tx(code, count=count, frequency=freq)
+            
+            if df.empty:
+                return []
+
+            # Format for return: [{date, open, high, low, close, volume}, ...]
+            # df columns from helper: ['time','open','close','high','low','volume']
+            
+            results = []
+            for _, row in df.iterrows():
+                results.append({
+                    'date': row['time'].strftime('%Y-%m-%d'),
+                    'open': row['open'],
+                    'high': row['high'],
+                    'low': row['low'],
+                    'close': row['close'],
+                    'volume': row['volume']
+                })
+            return results
+
+        else:
+            # Existing yfinance logic for non-CN stocks
+            interval_mapping = {
+                '1d': '1d',
+                '1w': '1wk',
+                '1m': '1mo',
+                '1y': '3mo'
+            }
+            yf_interval = interval_mapping.get(interval, interval)
+            # Fix weak match for 1w/1m passed from frontend if they differ
+            if interval == '1w': yf_interval = '1wk'
+            if interval == '1m': yf_interval = '1mo'
+
+            ticker = yf.Ticker(yf_symbol)
+            df = ticker.history(period=period, interval=yf_interval)
+            df = df.reset_index()
+            
+            required_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+            if not all(col in df.columns for col in required_cols):
+                 if df.empty:
+                     return []
+            
+            df = df[required_cols]
+            df.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
+            
+            df['date'] = df['date'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else '')
+            
+            return df.to_dict(orient="records")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
