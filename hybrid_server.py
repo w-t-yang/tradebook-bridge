@@ -18,10 +18,15 @@ app = FastAPI()
 def read_root():
     return {"status": "ok", "server": "hybrid_server"}
 
+import math
+
 def safe_float(val):
     try:
         if val is None: return None
-        return float(val)
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
     except (ValueError, TypeError):
         return None
 
@@ -686,6 +691,51 @@ def get_stock_info(symbol: str):
         return result
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Stock info not found: {str(e)}")
+
+# 3.8 /earnings (yfinance)
+@app.get("/earnings")
+def get_earnings(symbol: str):
+    try:
+        yf_symbol = to_yfinance_format(symbol)
+        ticker = yf.Ticker(yf_symbol)
+        
+        # Get earnings dates (includes history and future)
+        # Typically returns DataFrame with index 'Earnings Date' and columns ['EPS Estimate', 'Reported EPS', 'Surprise(%)']
+        df = ticker.earnings_dates
+        
+        if df is None or df.empty:
+            return []
+
+        df = df.reset_index()
+        results = []
+        
+        for _, row in df.iterrows():
+            earnings_date = row.get('Earnings Date')
+            if pd.isnull(earnings_date): continue
+            
+            # Format using safe_float
+            eps_est = safe_float(row.get('EPS Estimate'))
+            eps_act = safe_float(row.get('Reported EPS'))
+            surprise = safe_float(row.get('Surprise(%)'))
+            
+            # Formatting event time (BMO/AMC) is hard from this data, sometimes it's in the timestamp
+            # We'll just return the date string
+            date_str = earnings_date.strftime('%Y-%m-%d %H:%M:%S')
+            
+            results.append({
+                'date': date_str,
+                'epsEstimate': eps_est,
+                'epsActual': eps_act,
+                'surprise': surprise,
+                'year': earnings_date.year,
+                'quarter': f"Q{(earnings_date.month-1)//3 + 1}" # Rough approximation if not provided
+            })
+            
+        return results
+
+    except Exception as e:
+        print(f"Earnings fetch failed for {symbol}: {e}")
+        return []
 @app.get("/screener")
 def get_screener_results(sector: str = "", region: str = "US"):
     try:
