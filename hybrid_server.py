@@ -540,26 +540,89 @@ def get_sectors(region: str = "US"):
     return results
 
 # 3.6 /events (dummy)
-@app.get("/events")
-def get_events():
-    return [
-        {
-            "time": "14:30",
-            "country": "USA",
-            "event": "CPI Data Release",
-            "actual": "3.2%",
-            "forecast": "3.1%",
-            "impact": "High"
-        },
-        {
-            "time": "09:30",
-            "country": "CN",
-            "event": "Manufacturing PMI",
-            "actual": "50.1",
-            "forecast": "50.0",
-            "impact": "Medium"
+# 3.6 /events
+from bs4 import BeautifulSoup
+
+def scrape_economic_calendar():
+    try:
+        url = "https://www.investing.com/economic-calendar/"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'X-Requested-With': 'XMLHttpRequest'
         }
-    ]
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return []
+            
+        soup = BeautifulSoup(response.content, 'html.parser')
+        table = soup.find('table', {'id': 'economicCalendarData'})
+        
+        if not table:
+            return []
+            
+        rows = table.find_all('tr')
+        results = []
+        current_date = ""
+        
+        for row in rows:
+            # Date row
+            if 'theDay' in row.get('class', []):
+                current_date = row.get_text(strip=True)
+                continue
+                
+            # Event row
+            if 'js-event-item' in row.get('class', []):
+                try:
+                    time_td = row.find('td', {'class': 'time'})
+                    currency_td = row.find('td', {'class': 'left flagCur'})
+                    sentiment_td = row.find('td', {'class': 'sentiment'})
+                    event_td = row.find('td', {'class': 'event'})
+                    actual_td = row.find('td', {'class': 'act'})
+                    forecast_td = row.find('td', {'class': 'fore'})
+                    
+                    time_str = time_td.get_text(strip=True) if time_td else ""
+                    # Currency often contains formatted text, just get the code if possible
+                    currency = currency_td.get_text(strip=True) if currency_td else ""
+                    # Clean currency (sometimes it has newlines or spaces)
+                    currency = currency.strip()
+                    
+                    event = event_td.get_text(strip=True) if event_td else ""
+                    actual = actual_td.get_text(strip=True) if actual_td else ""
+                    forecast = forecast_td.get_text(strip=True) if forecast_td else ""
+                    
+                    # Determine importance
+                    impact = "Low"
+                    if sentiment_td:
+                        icons = sentiment_td.find_all('i', {'class': 'grayFullBullishIcon'})
+                        if len(icons) == 3: impact = "High"
+                        elif len(icons) == 2: impact = "Medium"
+                        
+                    results.append({
+                        "date": current_date,
+                        "time": time_str,
+                        "country": currency, # Using currency as proxy for country/region
+                        "event": event,
+                        "actual": actual,
+                        "forecast": forecast,
+                        "impact": impact
+                    })
+                except Exception:
+                    continue
+                    
+        return results
+    except Exception as e:
+        print(f"Scraping error: {e}")
+        return []
+
+@app.get("/events")
+def get_events(impact: str = "High"):
+    events = scrape_economic_calendar()
+    
+    # Filter based on impact if provided and not "all"
+    if impact and impact.lower() != "all":
+        events = [e for e in events if e.get("impact", "").lower() == impact.lower()]
+        
+    return events
 
 # 3.7 /info (yfinance)
 def _extract_stock_info(symbol: str, info: dict) -> dict:
